@@ -50,9 +50,8 @@ void R200::loop() {
     TagReport tag;
     if (parseTagReport(frame, tag)) {
       lastTag = tag;
-      if (tag.epcLength >= sizeof(uid)) {
-        memcpy(uid, tag.epc, sizeof(uid));
-      }
+      memset(uid, 0, sizeof(uid));
+      memcpy(uid, tag.epc, tag.epcLength < sizeof(uid) ? tag.epcLength : sizeof(uid));
       #ifdef DEBUG
         printHexByte("RSSI", tag.rssi);
         printHexWord("PC", tag.pc);
@@ -71,6 +70,11 @@ void R200::loop() {
 
 bool R200::sendCommand(uint8_t command, const uint8_t *payload, uint16_t payloadLength) {
   if (_serial == nullptr || payloadLength > R200_MAX_PAYLOAD_LENGTH) {
+    _lastError = Status_BufferTooSmall;
+    return false;
+  }
+
+  if (payloadLength > 0 && payload == nullptr) {
     _lastError = Status_BufferTooSmall;
     return false;
   }
@@ -125,6 +129,9 @@ R200::Status R200::command(uint8_t commandCode, const uint8_t *payload, uint16_t
 
 R200::Status R200::readFrame(Frame &frame, unsigned long timeout) {
   if (!receiveData(timeout)) {
+    if (_lastError == Status_BufferTooSmall) {
+      return Status_BufferTooSmall;
+    }
     _lastError = Status_Timeout;
     return Status_Timeout;
   }
@@ -194,6 +201,8 @@ bool R200::receiveData(unsigned long timeOut) {
   memset(_buffer, 0, sizeof(_buffer));
 
   bool inFrame = false;
+  uint16_t expectedLength = 0;
+
   while ((millis() - startTime) < timeOut) {
     while (_serial->available()) {
       uint8_t b = static_cast<uint8_t>(_serial->read());
@@ -204,6 +213,7 @@ bool R200::receiveData(unsigned long timeOut) {
         }
         inFrame = true;
         _bufferLength = 0;
+        expectedLength = 0;
       }
 
       if (_bufferLength >= sizeof(_buffer)) {
@@ -214,8 +224,20 @@ bool R200::receiveData(unsigned long timeOut) {
 
       _buffer[_bufferLength++] = b;
 
-      if (b == R200_FrameEnd && _bufferLength >= 7) {
-        return true;
+      if (_bufferLength >= 5 && expectedLength == 0) {
+        uint16_t paramLength = static_cast<uint16_t>(_buffer[R200_ParamLengthMSBPos]) << 8;
+        paramLength |= _buffer[R200_ParamLengthLSBPos];
+        expectedLength = static_cast<uint16_t>(7 + paramLength);
+
+        if (expectedLength > sizeof(_buffer)) {
+          flush();
+          _lastError = Status_BufferTooSmall;
+          return false;
+        }
+      }
+
+      if (expectedLength > 0 && _bufferLength >= expectedLength) {
+        return _buffer[expectedLength - 1] == R200_FrameEnd;
       }
     }
   }
@@ -311,9 +333,8 @@ bool R200::singlePoll(TagReport *tag, unsigned long timeout) {
   }
 
   lastTag = parsed;
-  if (parsed.epcLength >= sizeof(uid)) {
-    memcpy(uid, parsed.epc, sizeof(uid));
-  }
+  memset(uid, 0, sizeof(uid));
+  memcpy(uid, parsed.epc, parsed.epcLength < sizeof(uid) ? parsed.epcLength : sizeof(uid));
   if (tag != nullptr) {
     *tag = parsed;
   }
@@ -631,8 +652,10 @@ uint8_t R200::calculateCheckSum(uint8_t type, uint8_t commandCode, const uint8_t
   check += commandCode;
   check += static_cast<uint8_t>(payloadLength >> 8);
   check += static_cast<uint8_t>(payloadLength & 0xFF);
-  for (uint16_t i = 0; i < payloadLength; i++) {
-    check += payload[i];
+  if (payloadLength > 0 && payload != nullptr) {
+    for (uint16_t i = 0; i < payloadLength; i++) {
+      check += payload[i];
+    }
   }
   return static_cast<uint8_t>(check & 0xFF);
 }

@@ -4,7 +4,7 @@ Arduino/ESP32 code for R200 long-range UHF RFID reader
 The R200 is a UHF RFID module based on the EPC Gen-2 (ISO18000-6C) protocol. What does that mean in practice?
 Well, it can read up to 60 tags per second, at a range of 20m...
 
-The board I bought uses a serial interface, so it's pretty easy to control from an ESP32/Arduino/RaspPi. But, I found it a little hard to find much detailed information on the commands or format of the response; which is what I will now document in this respository.
+The board I bought uses a serial interface, so it's pretty easy to control from an ESP32/Arduino/RaspPi. But, I found it a little hard to find much detailed information on the commands or format of the response; which is what I will now document in this repository.
 
 This is the module I bought from https://www.aliexpress.com/item/4000281733851.html
 
@@ -23,7 +23,7 @@ Here is how I've wired it to use the Serial2 UART interface on the ESP32:
 ## Disable Beeper
 By default, the board will beep every time a tag is recognised. While this is very useful for debugging, it's often not desirable for production use! 
 As shown in the [schematic](https://github.com/playfultechnology/arduino-rfid-R200/blob/main/docs/R200%20%20SCH.pdf), the beeper is wired to 5V through a 0Ω resistor at R9, so desoldering this will prevent it from beeping.
-(Alternatively, you can desolder R11 to prevent the signal line to the transistor that activates the beeper.
+(Alternatively, you can desolder R11 to prevent the signal line to the transistor that activates the beeper.)
 
 ## Code
 The R200 code in the repository will print the EPC (i.e. tag ID) of all cards detected
